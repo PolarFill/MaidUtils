@@ -1,5 +1,5 @@
 # MaidUtils
-Gerenciador de pacotes genérico e portátil
+Um gerenciador de pacotes genérico e portátil feito em python
 
 ## 1 - Descrição
 
