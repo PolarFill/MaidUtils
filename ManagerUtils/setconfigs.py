@@ -18,6 +18,9 @@ def Setrepo(cmd, path): #Muda o repositório padrão
         del old_repo
         return
     
+    if old_repo == '' or old_repo == None:
+        old_repo = 'Null'
+    
     request = requests.get(f'https://github.com/{host}/{server}/tree/{branch}/{cmd}')
     if request.status_code == 200:
         config.set('Version', 'repo', cmd)
@@ -44,6 +47,9 @@ def Sethost(cmd, path): #Muda o host padrão
         print(Fore.RED + "O host selecionado já está definido como padrão")
         del old_host
         return
+    
+    if old_host == '' or old_host == None:
+        old_host = 'Null'
     
     request = requests.get(f'https://github.com/{cmd}')
     if request.status_code == 200:
@@ -73,6 +79,9 @@ def Setserver(cmd, path): #Muda o server padrão
         del old_server
         return
     
+    if old_server == '' or old_server == None:
+        old_server = 'Null'
+    
     request = requests.get(f'https://github.com/{host}/{cmd}')
     if request.status_code == 200:
         config.set('Version', 'server', cmd)
@@ -100,6 +109,9 @@ def Setbranch(cmd, path): #Muda o server padrão
         print(Fore.RED + "A branch selecionada já está definida como padrão")
         del old_branch
         return
+    
+    if old_branch == '' or old_branch == None:
+        old_branch = 'Null'
     
     request = requests.get(f'https://github.com/{host}/{server}/tree/{cmd}')
     if request.status_code == 200:

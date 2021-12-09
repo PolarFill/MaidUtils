@@ -1,10 +1,37 @@
-def Install(cmd, path): #Baixa pacotes
+def Install(cmd, path, reinstall=False, debug=False): #Baixa pacotes
     import os
     import requests
     import tqdm
     from colorama import Fore
     
-    print(Fore.BLUE + "Preparando download...", end='\r')
+    if debug == True: #Ativa debug caso esteja especificado
+        import logging
+        import http.client
+        http.client.HTTPConnection.debuglevel = 1
+        logging.basicConfig()
+        logging.getLogger().setLevel(logging.DEBUG)
+        requests_log = logging.getLogger("requests.packages.urllib3")
+        requests_log.setLevel(logging.DEBUG)
+        requests_log.propagate = True
+    
+    
+    if reinstall != True:
+        print(Fore.BLUE + "Preparando download...", end='\r')
+    else:
+        try:
+            import shutil
+            print(Fore.BLUE + "Preparando reinstalação...", end='\r')
+            downpath = checkpath(path, cmd) #Checando o diretório de download do pacote
+            checkinstall(cmd, downpath, reinstall=True) #Checa se o pacote está instalado
+            shutil.rmtree(downpath) #Removendo pacote
+            print("Pacote desinstalado, começando instalação", end='\r')
+        except IOError:
+            print(Fore.RED); esc = input("O pacote selecionado não está baixado. Deseja baixa-lo? (Y/N) ").lower()
+            if esc == 'y':
+                print(Fore.BLUE, end='')
+                pass
+            else:
+                return
     
     try:
         host = checkhost(path) #Checando o host
@@ -13,6 +40,7 @@ def Install(cmd, path): #Baixa pacotes
         repo = checkrepo(cmd, path, host, branch, server) #Checando o repositório do pacote
         package = checkpackage(cmd, repo, host, branch, server) #Checando o pacote que o usuarío deseja instalar
         downpath = checkpath(path, package) #Checando o diretório de download do pacote
+        checkinstall(cmd, downpath) #Checa se o pacote já está instalado
         target = checktarget() #Checa a plataforma do pacote
         packageversion = checkversion(cmd, repo, target, path, host, server, branch) #Checa a versão do pacote
         bartotal = checkcontentlength(repo,package,target,packageversion,host,server,branch,packageversion) #Pegando o content-lenght
@@ -22,10 +50,24 @@ def Install(cmd, path): #Baixa pacotes
         print(Fore.RED + "\033[KO pacote selecionado não existe"); return
     except EOFError: #Caso a versão não exista
         print(Fore.RED + "\033[KA versão selecionada do pacote não existe"); return
+    except IOError:
+        print(Fore.RED + "\033[KO pacote já está instalado. Caso deseje reinstalar ele, use o comando \"reinstall\""); return
     
     print('\033[KIniciando download...' + Fore.RESET)
-    final_link = f'https://github.com/{host}/{server}/blob/{branch}/{repo}/{package}/bin/{target}-{package}-{packageversion}.zip?raw=true'
-    request = requests.get(final_link) #Fazendo get para o zip com o arquivo para baixar
+    os.mkdir(downpath)
+    try:
+        final_link = f'https://github.com/{host}/{server}/blob/{branch}/{repo}/{package}/bin/{target}-{package}-{packageversion}.zip?raw=true'
+        request = requests.get(final_link, stream=True) #Fazendo get para o zip com o arquivo para baixar
+        if request.status_code != 200:
+            raise ValueError
+    except:
+        lasthope = checkmirror(path, host, server, branch, repo, package, packageversion, target)
+        if lasthope == None: 
+            return
+        else:
+            request = requests.get(lasthope)
+            
+    ########################################
     
     description = Fore.BLUE + f'Baixando "{target}-{package}-{packageversion}"'
     with open(f'{downpath}/{package}-{packageversion}.zip', 'wb') as file, tqdm.tqdm(desc=description, total=bartotal, unit_scale=True, unit_divisor=1024) as loadbar:
@@ -46,7 +88,35 @@ def Install(cmd, path): #Baixa pacotes
                 zip.extract(i, path=downpath) #Descompactar
                 loadbar.update(1) #Atualizar a barra
             loadbar.close()
+         
+    ########################################
+           
+    print(Fore.BLUE + "Finalizando download...", end='\r') #Passos finais na finalização do download
+    
+    os.remove(f'{downpath}/{package}-{packageversion}.zip') #Removendo .zip
+    
+    line_choice = checkline(path) #Pegando onde deve escrever as novas linhas e etc
+
+    #if target == 'win':
+    #    finalizer = '\r\n'
+    #else:
+    #    finalizer = '\n'
+
+    if reinstall == True:
+        with open(f'{path}/ManagerFiles/Bin/install2.bin', 'r+') as f:
+            leitura = f.readlines()
+            f.seek(0)
+            for i in leitura:
+                if i.startswith(f'{package} ') == False and i != '\n':
+                    f.write(i)
+            f.truncate()
             
+    with open(f'{path}/ManagerFiles/Bin/install2.bin', 'a') as f: #Abrndo arquivo em append
+        f.write(f'{package} = {host}||{server}||{branch}||{repo}||{target}||{packageversion}||{downpath} \n') #Atualizando linhas
+
+    if debug == True:
+        http.client.HTTPConnection.debuglevel = 0
+
     print(Fore.BLUE + f"Download concluido! Salvo em \"{downpath}\"")
 
 #################################
@@ -132,8 +202,6 @@ def checkpath(path, package): #Checa o diretório para baixar o pacote
     downpath = config.get('Global', 'downpath')
     
     if downpath == 'null': #Se downpath for null
-        if os.path.isdir(f'{path}/ManagerFiles/Downloads/{package}') == False: 
-            os.mkdir(f'{path}/ManagerFiles/Downloads/{package}') #Cria uma pasta chamada downloads (se ela não existir) e manda o download lá
         downpath = f'{path}/ManagerFiles/Downloads/{package}' 
     else:
         downpath = ''.join([f'{downpath}', '/' ,f'{package}'])
@@ -157,7 +225,7 @@ def checkversion(cmd, repo, target, path, host, server, branch):
     request = requests.get(f'https://raw.githubusercontent.com/{host}/{server}/{branch}/{repo}/{cmd}/versions.txt')
     with open(f'{path}/ManagerFiles/Cache/version.cache', 'wb') as f:
         f.write(request.content)
-    with open(f'{path}/ManagerFiles/version.cache', 'r') as f:
+    with open(f'{path}/ManagerFiles/Cache/version.cache', 'r') as f:
         leitura = f.read()
         leitura = leitura.split('\n')
         for i in leitura:
@@ -199,3 +267,62 @@ def checkcontentlength(repo, package, target, packageversion, host, server, bran
     link = f'https://raw.githubusercontent.com/{host}/{server}/{branch}/{repo}/{package}/bin/{target}-{package}-{version}'
     request = requests.head(link)
     return int(request.headers.get('content-length', 0))
+
+def checkinstall(cmd, downpath, reinstall=False):
+    import os
+    
+    print('\033[KChecando instalação do pacote...', end='\r')
+    
+    try:
+        if reinstall == False:
+            if os.path.isdir(downpath) == True:
+                raise IOError
+        else:
+            if os.path.isdir(downpath) == False:
+                raise IOError
+    except IOError:
+        raise
+    
+def checkmirror(path, host, server, branch, repo, package, packageversion, target):
+    import requests
+    from colorama import Fore
+    
+    print(Fore.BLUE + "Arquivo não encontrado, procurando mirror...")
+    
+    found = False
+    request = requests.get(f'https://raw.githubusercontent.com/{host}/{server}/{branch}/{repo}/{package}/bin/mirrors.txt')
+    with open(f'{path}/ManagerFiles/Cache/mirrors.cache', 'wb') as f:
+        f.write(request.content)
+    with open(f'{path}/ManagerFiles/Cache/mirrors.cache', 'r') as f:
+        leitura = f.read()
+        leitura = leitura.split('\n')
+        for i in leitura:
+            if i.startswith(f'{target}-{package}-{packageversion}') and '=' in i:
+                cmd, downlink = i.split('=')
+                if ' ' in downlink:
+                    downlink = downlink.replace(' ', '')
+                found = True
+                break
+        if found == True:
+            return downlink
+        else:
+            print(Fore.RED + "Não foi possível obter o pacote selecionado")
+            return None
+        
+def checkline(path):
+    import configparser
+    config = configparser.ConfigParser()
+    config.read(f'{path}/ManagerFiles/config.ini')
+    
+    lines = config.get('Global', 'line_choice')
+    return lines
+
+def checkline2(path, linecount):
+    import configparser
+    config = configparser.ConfigParser()
+    config.read(f'{path}/ManagerFiles/config.ini')
+    
+    linecount = str(linecount)
+    config.set('Global', 'line_choice', linecount)
+    with open(f'{path}/ManagerFiles/config.ini', 'w') as f:
+        config.write(f)

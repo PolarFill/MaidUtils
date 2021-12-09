@@ -38,6 +38,11 @@ def Analyze(cmd, path):
                 return codecs.decode(match.group(0), 'unicode-escape') #Decodificando
             return escape_sequences.sub(decode_match, s) #Substituindo strings         
         
+        decoded_message = decode_escapes(decoded_content)
+        if decoded_message.startswith("b'"):
+            decoded_message = decoded_message.replace("b'", '')
+        if decoded_message.endswith("'"):
+            decoded_message = decoded_message.replace("'", '')
+        
         print(Fore.BLUE + f"Descrição do pacote {cmd}:")
-        print('')
-        print(decode_escapes(decoded_content) + Fore.RESET)
+        print(Fore.LIGHTGREEN_EX + decoded_message+ Fore.RESET, end='')
